@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Spring Rope Animation</title>
+    <style>
+        body {
+            padding: 0;
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background-color: #fff; /* 淡色背景 */
+        }
+        h3 {
+            margin-top: 20px;
+        }
+        canvas {
+            /* border: 1px solid black; */
+            background-color: #f9f6f4; /* 更浅的底色 */
+        }
+        .controls {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin-top: 10px;
+        }
+        .slider-container {
+            margin: 5px 0;
+        }
+        label {
+            display: block;
+        }
+        input[type="range"] {
+            width: 200px;
+        }
+    </style>
+</head>
+<body>
+
+    <div> 
+        <h3>Hooke's Law With Spring Animation</h3>
+        <p>Since we are here, we not drag</p>
+    </div>
+    <canvas id="canvas" width="500" height="500"></canvas>
+
+    <div class="controls">
+        <div class="slider-container">
+            <label for="vRange">v:（velocity）: <span id="vValue">0</span></label>
+            <input type="range" id="vRange" min="0" max="1000" value="0">
+        </div>
+        <div class="slider-container">
+            <label for="kRange">k:（Stiffness） <span id="kValue">220</span></label>
+            <input type="range" id="kRange" min="0" max="300" value="220">
+        </div>
+        <div class="slider-container">
+            <label for="bRange">b:(Damping) <span id="bValue">10</span></label>
+            <input type="range" id="bRange" min="0" max="100" value="10">
+        </div>
+        <div class="slider-container">
+            <label for="mRange">m:(Mass) <span id="mValue">1</span></label>
+            <input type="range" id="mRange" min="1" max="5" value="1">
+        </div>
+        <div class="slider-container">
+            <label for="dampingRatio">Damping Ratio: <span id="dampingRatioValue">0.0</span></label>
+            <input type="range" id="dampingRatio" min="0" max="10" step="0.1" value="0">
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+
+        const initialRectSize = 40;
+        const maxRectSize = 200;
+        const minMass = 1;
+        const maxMass = 5;
+
+        let rectWidth = initialRectSize;
+        let rectHeight = initialRectSize;
+        const ropeStartX = canvas.width / 2; 
+        const ropeStartY = 0;
+
+        let isDragging = false;
+        let startY = 0;  
+        let lastMoveTime = performance.now();
+        let pointer = {x: 0, y: 0};
+        let moveHistory = [];
+
+        // Spring configuration
+        let spring = {
+            pos: 50,
+            dest: 100,
+            v: parseInt(document.getElementById('vRange').value),
+            k: parseInt(document.getElementById('kRange').value),
+            b: parseInt(document.getElementById('bRange').value),
+            m: parseInt(document.getElementById('mRange').value)
+        };
+        const msPerAnimationStep = 16; 
+
+        const ropeSegments = 10;
+        const segmentPoints = Array.from({ length: ropeSegments + 1 }, (_, i) => ({ x: ropeStartX, y: ropeStartY + i * ((spring.pos - ropeStartY) / ropeSegments) }));
+
+        ctx.fillStyle = 'red';
+
+        function calculateDampingRatio(b, k, m) {
+            return b / (2 * Math.sqrt(k * m));
+        }
+
+        function updateRectSize(mass) {
+            const size = initialRectSize + (maxRectSize - initialRectSize) * (mass - minMass) / (maxMass - minMass);
+            rectWidth = size;
+            rectHeight = size;
+        }
+
+        function drawRect() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.beginPath();
+            ctx.moveTo(ropeStartX, ropeStartY);
+
+            for (let i = 0; i <= ropeSegments; i++) {
+                ctx.lineTo(segmentPoints[i].x, segmentPoints[i].y);
+            }
+
+            ctx.stroke();
+
+            ctx.fillRect(ropeStartX - rectWidth / 2, spring.pos, rectWidth, rectHeight);
+        }
+
+        drawRect();
+
+        function springStep(config) {
+            const t = msPerAnimationStep / 1000; 
+            const {pos, dest, v, k, b, m} = config; 
+            const Fspring = -k * (pos - dest); 
+            const Fdamper = -b * v; 
+            const a = (Fspring + Fdamper) / m; 
+            const newV = v + a * t; 
+            const newPos = pos + newV * t; 
+            config.pos = newPos;
+            config.v = newV;
+
+            const segmentY = (spring.pos - ropeStartY) / ropeSegments;
+            for (let i = 1; i <= ropeSegments; i++) {
+                segmentPoints[i].y = ropeStartY + i * segmentY;
+                segmentPoints[i].x = ropeStartX + Math.sin(i + performance.now() / 500) * 5;
+            }
+        }
+
+        function animate() {
+            springStep(spring);
+            drawRect();
+            if (Math.abs(spring.v) > 0.1 || Math.abs(spring.pos - spring.dest) > 0.1) {
+                requestAnimationFrame(animate);
+            }
+        }
+
+        function updateVelocity() {
+            const now = performance.now();
+            const deltaTime = now - lastMoveTime;
+            const lastMove = moveHistory[moveHistory.length - 1];
+            let i = moveHistory.length - 1;
+            while (i >= 0 && now - moveHistory[i].time <= 100) i--;
+            const firstMove = moveHistory[i + 1];
+            const dy = lastMove.y - firstMove.y;
+            const dt = (lastMove.time - firstMove.time) / 1000;
+            spring.v = dy / dt;
+            document.getElementById('vRange').value = spring.v;
+            document.getElementById('vValue').innerText = spring.v.toFixed(2);
+            lastMoveTime = now;
+            moveHistory = [];
+        }
+
+        canvas.addEventListener('mousedown', function(e) {
+            const rectX = ropeStartX - rectWidth / 2;
+            if (e.offsetX >= rectX && e.offsetX <= rectX + rectWidth && 
+                e.offsetY >= spring.pos && e.offsetY <= spring.pos + rectHeight) {
+                isDragging = true;
+                startY = e.offsetY - spring.pos;
+                lastMoveTime = performance.now();
+                moveHistory = [{y: e.clientY, time: lastMoveTime}];
+            }
+        });
+
+        canvas.addEventListener('mousemove', function(e) {
+            if (isDragging) {
+                const now = performance.now();
+                const deltaTime = now - lastMoveTime;
+                if (deltaTime > 16) {
+                    moveHistory.push({y: e.clientY, time: now});
+                    if (moveHistory.length > 5) {
+                        moveHistory.shift();
+                    }
+                    lastMoveTime = now;
+                }
+                spring.pos = e.offsetY - startY;
+                const segmentY = (spring.pos - ropeStartY) / ropeSegments;
+                for (let i = 1; i <= ropeSegments; i++) {
+                    segmentPoints[i].y = ropeStartY + i * segmentY;
+                }
+                drawRect();
+            }
+        });
+
+        canvas.addEventListener('mouseup', function(e) {
+            if (isDragging) {
+                updateVelocity(); // Update velocity on mouse up
+                spring.dest = 100; 
+                isDragging = false;
+                animate();
+            }
+        });
+
+        canvas.addEventListener('mouseleave', function(e) {
+            if (isDragging) {
+                updateVelocity(); // Update velocity on mouse leave
+                spring.dest = 100; 
+                isDragging = false;
+                animate();
+            }
+        });
+
+        // Update spring parameters based on sliders
+        document.getElementById('vRange').addEventListener('input', function() {
+            spring.v = parseInt(this.value);
+            document.getElementById('vValue').innerText = this.value;
+        });
+
+        document.getElementById('kRange').addEventListener('input', function() {
+            spring.k = parseInt(this.value);
+            document.getElementById('kValue').innerText = this.value;
+            updateDampingRatio();
+        });
+
+        document.getElementById('bRange').addEventListener('input', function() {
+            spring.b = parseInt(this.value);
+            document.getElementById('bValue').innerText = this.value;
+            updateDampingRatio();
+        });
+
+        document.getElementById('mRange').addEventListener('input', function() {
+            spring.m = parseInt(this.value);
+            document.getElementById('mValue').innerText = this.value;
+            updateRectSize(spring.m); // 更新矩形大小
+            updateDampingRatio();
+        });
+
+        document.getElementById('dampingRatio').addEventListener('input', function() {
+            const dampingRatio = parseFloat(this.value);
+            document.getElementById('dampingRatioValue').innerText = dampingRatio.toFixed(1);
+            spring.b = dampingRatio * 2 * Math.sqrt(spring.k * spring.m);
+            document.getElementById('bValue').innerText = spring.b.toFixed(1);
+        });
+
+        function updateDampingRatio() {
+            const dampingRatio = calculateDampingRatio(spring.b, spring.k, spring.m);
+            document.getElementById('dampingRatioValue').innerText = dampingRatio.toFixed(1);
+            document.getElementById('dampingRatio').value = dampingRatio.toFixed(1);
+        }
+
+        // Initial damping ratio update
+        updateDampingRatio();
+    </script>
+
+</body>
+</html>
