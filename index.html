@@ -172,6 +172,14 @@
             moveHistory = [];
         }
 
+        function getTouchPos(e) {
+            const rect = canvas.getBoundingClientRect();
+            return {
+                x: e.touches[0].clientX - rect.left,
+                y: e.touches[0].clientY - rect.top
+            };
+        }
+
         canvas.addEventListener('mousedown', function(e) {
             const rectX = ropeStartX - rectWidth / 2;
             if (e.offsetX >= rectX && e.offsetX <= rectX + rectWidth && 
@@ -218,6 +226,61 @@
                 spring.dest = 100; 
                 isDragging = false;
                 animate();
+            }
+        });
+
+        canvas.addEventListener('touchstart', function(e) {
+            const pos = getTouchPos(e);
+            const rectX = ropeStartX - rectWidth / 2;
+            if (pos.x >= rectX && pos.x <= rectX + rectWidth && 
+                pos.y >= spring.pos && pos.y <= spring.pos + rectHeight) {
+                isDragging = true;
+                startY = pos.y - spring.pos;
+                lastMoveTime = performance.now();
+                moveHistory = [{y: pos.y, time: lastMoveTime}];
+                e.preventDefault();
+            }
+        });
+
+        canvas.addEventListener('touchmove', function(e) {
+            if (isDragging) {
+                const pos = getTouchPos(e);
+                const now = performance.now();
+                const deltaTime = now - lastMoveTime;
+                if (deltaTime > 16) {
+                    moveHistory.push({y: pos.y, time: now});
+                    if (moveHistory.length > 5) {
+                        moveHistory.shift();
+                    }
+                    lastMoveTime = now;
+                }
+                spring.pos = pos.y - startY;
+                const segmentY = (spring.pos - ropeStartY) / ropeSegments;
+                for (let i = 1; i <= ropeSegments; i++) {
+                    segmentPoints[i].y = ropeStartY + i * segmentY;
+                }
+                drawRect();
+                e.preventDefault();
+            }
+        });
+
+        canvas.addEventListener('touchend', function(e) {
+            if (isDragging) {
+                updateVelocity(); // Update velocity on touch end
+                spring.dest = 100; 
+                isDragging = false;
+                animate();
+                e.preventDefault();
+            }
+        });
+
+        canvas.addEventListener('touchcancel', function(e) {
+            if (isDragging) {
+                updateVelocity(); // Update velocity on touch cancel
+                spring.dest = 100; 
+                isDragging = false;
+                animate();
+                e.preventDefault();
             }
         });
 
